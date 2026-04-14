@@ -1,6 +1,6 @@
 # LED::Led
 
-Component to blink an LED driven by IMU on/off status
+Component to receive command from Led Controller to turn on/off Led
 
 ## Introduction
 

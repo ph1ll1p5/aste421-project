@@ -1,21 +1,24 @@
 module LED {
-    @ Component to blink an LED driven by IMU on/off status
-    active component Led {
-
-        # One async command/port is required for active components
-        # This should be overridden by the developers with a useful command/port
-        @ TODO
-        async command TODO opcode 0
-
-        @ Command to turn on or off the Led
-        async command LED_ON_OFF(
-            onOff: Fw.On @< Indicates whether LED should be on or off
-        )
+    @ Component to receive command from Led Controller to turn on/off Led
+    passive component Led {
 
         ##############################################################################
         #### Uncomment the following examples to start customizing your component ####
         ##############################################################################
 
+        @ Telemetry channel to report Led on/off
+        telemetry LedState: Fw.On
+
+        @ Event to log LED on/off state change
+        event LedOnOffState(onOff: Fw.On) severity activity low format "LED is {}"
+
+        @ Port to receive on/off command for LED
+        sync input port cmdIn: Drv.GpioWrite
+
+        @ Port to send Led on/off command to gpio driver
+        output port gpioSet: Drv.GpioWrite
+
+        # EXAMPLES
         # @ Example async command
         # async command COMMAND_NAME(param_name: U32)
 
@@ -24,9 +27,6 @@ module LED {
 
         # @ Example event
         # event ExampleStateEvent(example_state: Fw.On) severity activity high id 0 format "State set to {}"
-
-        # @ Example port: receiving calls from the rate group
-        # sync input port run: Svc.Sched
 
         # @ Example parameter
         # param PARAMETER_NAME: U32
@@ -37,8 +37,9 @@ module LED {
         @ Port for requesting the current time
         time get port timeCaller
 
-        @ Enables command handling
-        import Fw.Command
+        # Commented out, LED component does not accept ground commands directly
+        #@ Enables command handling
+        #import Fw.Command
 
         @ Enables event handling
         import Fw.Event
