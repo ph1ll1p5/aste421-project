@@ -50,6 +50,8 @@ module asteIMU {
   # Queued component instances
   # ----------------------------------------------------------------------
 
+  instance imuManager: asteIMU.ImuManager base id 0x10005000 \
+    queue size asteIMU.QueueSizes.imuManager
 
   # ----------------------------------------------------------------------
   # Passive component instances

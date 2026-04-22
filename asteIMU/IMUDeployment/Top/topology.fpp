@@ -32,7 +32,8 @@ module asteIMU {
     instance timer
     instance comDriver
     instance cmdSeq
-    instance imuManager 
+    instance imuManager
+    instance imuDriver 
 
   # ----------------------------------------------------------------------
   # Pattern graph specifiers
@@ -129,7 +130,8 @@ module asteIMU {
     }
 
     connections IMUDeployment {
-
+      imuManager.busWriteRead -> imuDriver.writeRead
+      imuManager.busWrite -> imuDriver.write
     }
 
   }

@@ -24,6 +24,8 @@
 
 // Include autocoded FPP constants
 #include "asteIMU/IMUDeployment/Top/FppConstantsAc.hpp"
+#include <Fw/Logger/Logger.hpp>
+#include "asteIMUConfig/asteIMUTopologyConfig.hpp"
 
 /**
  * \brief required ping constants
@@ -68,6 +70,7 @@ struct TopologyState {
     ComCcsds::SubtopologyState comCcsds;         //!< Subtopology state for ComCcsds 
     DataProducts::SubtopologyState dataProducts; //!< Subtopology state for DataProducts
     FileHandling::SubtopologyState fileHandling; //!< Subtopology state for FileHandling
+    ImuDevice device;
 };
 
 namespace PingEntries = ::PingEntries;

@@ -20,6 +20,7 @@ register_fprime_library(
         "${CMAKE_CURRENT_LIST_DIR}/ImuStateMachine.fpp"
     SOURCES
         "${CMAKE_CURRENT_LIST_DIR}/ImuManager.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/ImuHelpers.cpp"
 #   DEPENDS
 #       MyPackage_MyOtherModule
 )
