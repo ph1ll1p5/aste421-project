@@ -16,4 +16,13 @@ Led ::Led(const char* const compName) : LedComponentBase(compName) {}
 
 Led ::~Led() {}
 
+// ----------------------------------------------------------------------
+// Handler implementations for typed input ports
+// ----------------------------------------------------------------------
+
+Drv::GpioStatus Led ::cmdInLed_handler(FwIndexType portNum, const Fw::Logic& state) {
+    // TODO return
+    
+}
+
 }  // namespace LED

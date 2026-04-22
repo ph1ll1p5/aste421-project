@@ -13,7 +13,7 @@ module LED {
         event LedOnOffState(onOff: Fw.On) severity activity low format "LED is {}"
 
         @ Port to receive on/off command for LED
-        sync input port cmdIn: Drv.GpioWrite
+        sync input port cmdInLed: Drv.GpioWrite
 
         @ Port to send Led on/off command to gpio driver
         output port gpioSet: Drv.GpioWrite

@@ -23,6 +23,20 @@ class Led final : public LedComponentBase {
 
     //! Destroy Led object
     ~Led();
+
+  private:
+    // ----------------------------------------------------------------------
+    // Handler implementations for typed input ports
+    // ----------------------------------------------------------------------
+
+    //! Handler implementation for cmdIn
+    //!
+    //! Port to receive on/off command for LED
+    Drv::GpioStatus cmdInLed_handler(FwIndexType portNum,  //!< The port number
+                                  const Fw::Logic& state) override;
+
+    //! Tracks the most recently commanded LED state
+    Fw::On m_state = Fw::On::OFF; // stores whether the LED is ON or OFF, and start it as OFF
 };
 
 }  // namespace LED
