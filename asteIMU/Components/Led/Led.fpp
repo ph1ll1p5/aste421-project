@@ -18,7 +18,7 @@ module LED {
         @ Port to send Led on/off command to gpio driver
         output port gpioSet: Drv.GpioWrite
 
-        # EXAMPLES
+        # EXAMPLES #################################
         # @ Example async command
         # async command COMMAND_NAME(param_name: U32)
 
@@ -30,6 +30,7 @@ module LED {
 
         # @ Example parameter
         # param PARAMETER_NAME: U32
+        # ############################################################
 
         ###############################################################################
         # Standard AC Ports: Required for Channels, Events, Commands, and Parameters  #

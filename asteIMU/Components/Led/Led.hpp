@@ -31,6 +31,7 @@ class Led final : public LedComponentBase {
 
     //! Handler implementation for cmdIn
     //!
+    
     //! Port to receive on/off command for LED
     Drv::GpioStatus cmdInLed_handler(FwIndexType portNum,  //!< The port number
                                   const Fw::Logic& state) override;
