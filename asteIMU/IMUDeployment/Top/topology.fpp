@@ -109,6 +109,7 @@ module asteIMU {
       rateGroup1.RateGroupMemberOut[2] -> systemResources.run
       rateGroup1.RateGroupMemberOut[3] -> ComCcsds.comQueue.run
       rateGroup1.RateGroupMemberOut[4] -> ComCcsds.aggregator.timeout
+      rateGroup1.RateGroupMemberOut[5] -> imuManager.run
 
       # Rate group 2
       rateGroupDriver.CycleOut[Ports_RateGroups.rateGroup2] -> rateGroup2.CycleIn

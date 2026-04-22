@@ -79,6 +79,7 @@ int main(int argc, char* argv[]) {
     asteIMU::TopologyState inputs;
     inputs.hostname = hostname;
     inputs.port = port_number;
+    inputs.device = "/dev/i2c-1";
 
     // Setup program shutdown via Ctrl-C
     signal(SIGINT, signalHandler);

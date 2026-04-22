@@ -2,6 +2,7 @@
 // \title  ImuHelpers.cpp
 // \author mstarch
 // \brief  cpp file for ImuManager component helper function implementations
+//         Rewritten for BNO055 IMU
 // ======================================================================
 
 #include "asteIMU/Components/ImuManager/ImuManager.hpp"
@@ -10,56 +11,51 @@
 namespace asteIMU {
 
 Drv::I2cStatus ImuManager ::reset() {
-    // Attempt to write the reset data
-    U8 reset_sequence[] = {POWER_MGMT_REGISTER, RESET_VALUE};
+    // Write reset bit to SYS_TRIGGER register
+    U8 reset_sequence[] = {SYS_TRIGGER_REGISTER, RESET_VALUE};
     Fw::Buffer writeBuffer(reset_sequence, sizeof(reset_sequence));
     Fw::Buffer readBuffer;
     return this->bus_write(writeBuffer, readBuffer);
 }
 
 Drv::I2cStatus ImuManager ::read_reset(U8& value) {
-    U8 registerAddress = POWER_MGMT_REGISTER;
+    // Read OPR_MODE register - after reset it will return to 0x00 (CONFIG_MODE)
+    U8 registerAddress = OPR_MODE_REGISTER;
     Fw::Buffer writeBuffer(&registerAddress, sizeof(registerAddress));
     Fw::Buffer readBuffer(&value, sizeof(value));
     return this->bus_write(writeBuffer, readBuffer);
 }
 
 Drv::I2cStatus ImuManager ::enable() {
-    U8 power_on_sequence[] = {POWER_MGMT_REGISTER, POWER_ON_VALUE};
-    Fw::Buffer writeBuffer(power_on_sequence, sizeof(power_on_sequence));
+    // First set page 0
+    U8 page_sequence[] = {PAGE_ID_REGISTER, 0x00};
+    Fw::Buffer pageBuffer(page_sequence, sizeof(page_sequence));
+    Fw::Buffer emptyBuffer;
+    Drv::I2cStatus status = this->bus_write(pageBuffer, emptyBuffer);
+    if (status != Drv::I2cStatus::I2C_OK) {
+        return status;
+    }
+    // Set operation mode to NDOF (full sensor fusion)
+    U8 mode_sequence[] = {OPR_MODE_REGISTER, NDOF_MODE};
+    Fw::Buffer writeBuffer(mode_sequence, sizeof(mode_sequence));
     Fw::Buffer readBuffer;
     return this->bus_write(writeBuffer, readBuffer);
 }
 
 Drv::I2cStatus ImuManager ::configure_device() {
-    Fw::ParamValid paramValid;
-    Drv::I2cStatus status = Drv::I2cStatus::I2C_OK;
-    // Read accelerometer parameter and configure
-    {
-        const AccelerationRange accelerationRange = this->paramGet_ACCELEROMETER_RANGE(paramValid);
-        FW_ASSERT(paramValid != Fw::ParamValid::INVALID, static_cast<FwAssertArgType>(paramValid));
-
-        U8 accel_config_sequence[] = {ACCEL_CONFIG_REGISTER, this->accelerometer_range_to_register(accelerationRange)};
-        Fw::Buffer writeBuffer(accel_config_sequence, sizeof(accel_config_sequence));
-        Fw::Buffer readBuffer;
-        status = this->bus_write(writeBuffer, readBuffer);
-        if (status != Drv::I2cStatus::I2C_OK) {
-            return status;
-        }
+    // Set power mode to normal
+    U8 pwr_sequence[] = {PWR_MODE_REGISTER, NORMAL_POWER};
+    Fw::Buffer writeBuffer(pwr_sequence, sizeof(pwr_sequence));
+    Fw::Buffer readBuffer;
+    Drv::I2cStatus status = this->bus_write(writeBuffer, readBuffer);
+    if (status != Drv::I2cStatus::I2C_OK) {
+        return status;
     }
-    // Read gyroscope parameter and configure
-    {
-        const GyroscopeRange gyroscopeRange = this->paramGet_GYROSCOPE_RANGE(paramValid);
-        FW_ASSERT(paramValid != Fw::ParamValid::INVALID, static_cast<FwAssertArgType>(paramValid));
-        U8 gyro_config_sequence[] = {GYRO_CONFIG_REGISTER, this->gyroscope_range_to_register(gyroscopeRange)};
-        Fw::Buffer writeBuffer(gyro_config_sequence, sizeof(gyro_config_sequence));
-        Fw::Buffer readBuffer;
-        status = this->bus_write(writeBuffer, readBuffer);
-        if (status != Drv::I2cStatus::I2C_OK) {
-            return status;
-        }
-    }
-    return status;
+    // Set page 0
+    U8 page_sequence[] = {PAGE_ID_REGISTER, 0x00};
+    Fw::Buffer pageBuffer(page_sequence, sizeof(page_sequence));
+    Fw::Buffer emptyBuffer;
+    return this->bus_write(pageBuffer, emptyBuffer);
 }
 
 Drv::I2cStatus ImuManager ::read(ImuData& imuData) {
@@ -68,14 +64,12 @@ Drv::I2cStatus ImuManager ::read(ImuData& imuData) {
 
     Fw::Buffer writeBuffer(&registerAddress, 1);
     Fw::Buffer readBuffer(data, DATA_LENGTH);
-    // If bus write fails, state machine is reset, so just return
     Drv::I2cStatus status = this->bus_write(writeBuffer, readBuffer);
     if (status != Drv::I2cStatus::I2C_OK) {
         return status;
     }
     RawImuData raw = this->deserialize_raw_data(readBuffer);
 
-    // This code will read the currently scaled parameters
     Fw::ParamValid paramValid;
     const AccelerationRange accelerationRange = this->paramGet_ACCELEROMETER_RANGE(paramValid);
     FW_ASSERT(paramValid != Fw::ParamValid::INVALID, static_cast<FwAssertArgType>(paramValid));
@@ -89,10 +83,12 @@ Drv::I2cStatus ImuManager ::read(ImuData& imuData) {
 RawImuData ImuManager ::deserialize_raw_data(Fw::Buffer& buffer) {
     auto deserializer = buffer.getDeserializer();
     RawImuData raw;
+    // BNO055 accelerometer data: X_LSB, X_MSB, Y_LSB, Y_MSB, Z_LSB, Z_MSB
     deserializer.deserialize(raw.acceleration[0]);
     deserializer.deserialize(raw.acceleration[1]);
     deserializer.deserialize(raw.acceleration[2]);
-    deserializer.deserialize(raw.temperature);
+    raw.temperature = 0;  // Read separately if needed
+    // Gyroscope data follows accelerometer
     deserializer.deserialize(raw.gyroscope[0]);
     deserializer.deserialize(raw.gyroscope[1]);
     deserializer.deserialize(raw.gyroscope[2]);
@@ -102,18 +98,16 @@ RawImuData ImuManager ::deserialize_raw_data(Fw::Buffer& buffer) {
 ImuData ImuManager ::convert_raw_data(const RawImuData& raw,
                                       const AccelerationRange& accelerationRange,
                                       const GyroscopeRange& gyroscopeRange) {
-    // Set the values of the IMU data by multiplying by conversion factors
     asteIMU::ImuData imuData;
-    imuData.get_acceleration().set_x(static_cast<F32>(raw.acceleration[0]) * 1.0f /
-                                     static_cast<F32>(accelerationRange));
-    imuData.get_acceleration().set_y(static_cast<F32>(raw.acceleration[1]) * 1.0f /
-                                     static_cast<F32>(accelerationRange));
-    imuData.get_acceleration().set_z(static_cast<F32>(raw.acceleration[2]) * 1.0f /
-                                     static_cast<F32>(accelerationRange));
-    imuData.set_temperature((static_cast<F32>(raw.temperature) / TEMPERATURE_SCALAR) + TEMPERATURE_OFFSET);
-    imuData.get_rotation().set_x(static_cast<F32>(raw.gyroscope[0]) * 10.0f / static_cast<F32>(gyroscopeRange));
-    imuData.get_rotation().set_y(static_cast<F32>(raw.gyroscope[1]) * 10.0f / static_cast<F32>(gyroscopeRange));
-    imuData.get_rotation().set_z(static_cast<F32>(raw.gyroscope[2]) * 10.0f / static_cast<F32>(gyroscopeRange));
+    // BNO055 in NDOF mode: accel scale is 1mg/LSB = 0.001 m/s^2 per LSB
+    imuData.get_acceleration().set_x(static_cast<F32>(raw.acceleration[0]) / 100.0f);
+    imuData.get_acceleration().set_y(static_cast<F32>(raw.acceleration[1]) / 100.0f);
+    imuData.get_acceleration().set_z(static_cast<F32>(raw.acceleration[2]) / 100.0f);
+    imuData.set_temperature(0.0f);
+    // BNO055 in NDOF mode: gyro scale is 1/16 deg/s per LSB
+    imuData.get_rotation().set_x(static_cast<F32>(raw.gyroscope[0]) / 16.0f);
+    imuData.get_rotation().set_y(static_cast<F32>(raw.gyroscope[1]) / 16.0f);
+    imuData.get_rotation().set_z(static_cast<F32>(raw.gyroscope[2]) / 16.0f);
     return imuData;
 }
 

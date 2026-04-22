@@ -1,36 +1,44 @@
-// ======================================================================
-// \title  ImuTypes.hpp
-// \author mstarch
-// \brief  hpp file for defining constants and types for ImuHelpers.cpp
-// ======================================================================
-
 #ifndef asteIMU_ImuTypes_HPP
 #define asteIMU_ImuTypes_HPP
 #include "Fw/FPrimeBasicTypes.hpp"
 
 namespace asteIMU {
-    static constexpr U8 DATA_LENGTH = (6 + 1) * sizeof(U16);  // 6 DoF + temperature
-    static constexpr U8 DATA_BASE_REGISTER = 0x3B;
-    static constexpr U8 DEVICE_DEFAULT_ADDRESS = 0x68;
-    static constexpr U8 POWER_MGMT_REGISTER = 0x6B;
-    static constexpr U8 RESET_VALUE = 0x80;
+    static constexpr U8 DEVICE_DEFAULT_ADDRESS = 0x28;
+
+    // BNO055 Registers
+    static constexpr U8 OPR_MODE_REGISTER = 0x3D;
+    static constexpr U8 PWR_MODE_REGISTER = 0x3E;
+    static constexpr U8 SYS_TRIGGER_REGISTER = 0x3F;
+    static constexpr U8 PAGE_ID_REGISTER = 0x07;
+
+    // Operation modes
+    static constexpr U8 CONFIG_MODE = 0x00;
+    static constexpr U8 NDOF_MODE = 0x0C;  // Full fusion mode
+
+    // Power modes
+    static constexpr U8 NORMAL_POWER = 0x00;
+
+    // Reset value
+    static constexpr U8 RESET_VALUE = 0x20;
     static constexpr U8 POWER_ON_VALUE = 0x00;
-    static constexpr U8 GYRO_CONFIG_REGISTER = 0x1B;
-    static constexpr U8 ACCEL_CONFIG_REGISTER = 0x1C;
 
-    // Configuration values for the accelerometer and gyroscope
+    // Data registers - accelerometer starts at 0x28
+    static constexpr U8 DATA_BASE_REGISTER = 0x28;
+    static constexpr U8 DATA_LENGTH = 6 * sizeof(U16); // accel + gyro (no temp for now)
+
+    // Accel/Gyro config (BNO055 handles scaling internally in NDOF mode)
     static constexpr U8 ACCEL_CONFIG_2G = 0x00;
-    static constexpr U8 ACCEL_CONFIG_4G = 0x08;
-    static constexpr U8 ACCEL_CONFIG_8G = 0x10;
-    static constexpr U8 ACCEL_CONFIG_16G = 0x18;
-    static constexpr U8 GYRO_CONFIG_250DEG = 0x00;
-    static constexpr U8 GYRO_CONFIG_500DEG = 0x08;
-    static constexpr U8 GYRO_CONFIG_1000DEG = 0x10;
-    static constexpr U8 GYRO_CONFIG_2000DEG = 0x18;
-    static constexpr F32 TEMPERATURE_SCALAR = 340.0f;
-    static constexpr F32 TEMPERATURE_OFFSET = 36.53f;
+    static constexpr U8 ACCEL_CONFIG_4G = 0x01;
+    static constexpr U8 ACCEL_CONFIG_8G = 0x02;
+    static constexpr U8 ACCEL_CONFIG_16G = 0x03;
+    static constexpr U8 GYRO_CONFIG_250DEG = 0x04;
+    static constexpr U8 GYRO_CONFIG_500DEG = 0x03;
+    static constexpr U8 GYRO_CONFIG_1000DEG = 0x02;
+    static constexpr U8 GYRO_CONFIG_2000DEG = 0x00;
 
-    //! RawImuData: basic structure of imu data as read from the device
+    static constexpr F32 TEMPERATURE_SCALAR = 1.0f;
+    static constexpr F32 TEMPERATURE_OFFSET = 0.0f;
+
     struct RawImuData {
         I16 acceleration[3];
         I16 temperature;
