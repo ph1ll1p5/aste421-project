@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.animation as animation
-from .kalman_imu import KalmanIMU
+from gdsPlugins.kalman_imu import KalmanIMU
 
 # UDP setup
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
