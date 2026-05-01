@@ -1,0 +1,9 @@
+register_fprime_config(
+    AUTOCODER_INPUTS
+        "${CMAKE_CURRENT_LIST_DIR}/asteIMUTopologyConfig.fpp"
+    DEPENDS
+        Fw_Types
+    EXCLUDE_FROM_ALL
+    HEADERS
+        "${CMAKE_CURRENT_LIST_DIR}/asteIMUTopologyConfig.hpp"
+)
