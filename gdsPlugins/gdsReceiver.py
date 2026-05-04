@@ -1,6 +1,7 @@
 import json
 import re
 import socket
+import time
 from typing import Any, Dict, Optional
 
 from fprime_gds.common.handlers import DataHandlerPlugin
@@ -16,24 +17,24 @@ def _safe_float(value: Any) -> Optional[float]:
 
 def _field_from_channel(full_name: str) -> Optional[str]:
     """
-    Map your F´ channel names to imu fields.
-
-    Edit this mapping to match your dictionary names.
+    Broader matching so the plugin works even if your F´ channel names
+    are slightly different than expected.
     """
     name = full_name.lower()
 
-    aliases = {
-        "accel_x": ["accel_x", "acc_x", "imu.accel.x", ".ax", "_ax", "xaccel"],
-        "accel_y": ["accel_y", "acc_y", "imu.accel.y", ".ay", "_ay", "yaccel"],
-        "accel_z": ["accel_z", "acc_z", "imu.accel.z", ".az", "_az", "zaccel"],
-        "ang_x": ["ang_x", "gyro_x", "angacc_x", "imu.gyro.x", ".gx", "_gx"],
-        "ang_y": ["ang_y", "gyro_y", "angacc_y", "imu.gyro.y", ".gy", "_gy"],
-        "ang_z": ["ang_z", "gyro_z", "angacc_z", "imu.gyro.z", ".gz", "_gz"],
+    patterns = {
+        "accel_x": [r"acc.*x", r"x.*acc", r"_ax\b", r"\.ax\b", r"accelx"],
+        "accel_y": [r"acc.*y", r"y.*acc", r"_ay\b", r"\.ay\b", r"accely"],
+        "accel_z": [r"acc.*z", r"z.*acc", r"_az\b", r"\.az\b", r"accelz"],
+        "ang_x":   [r"gyro.*x", r"x.*gyro", r"_gx\b", r"\.gx\b", r"ang.*x"],
+        "ang_y":   [r"gyro.*y", r"y.*gyro", r"_gy\b", r"\.gy\b", r"ang.*y"],
+        "ang_z":   [r"gyro.*z", r"z.*gyro", r"_gz\b", r"\.gz\b", r"ang.*z"],
     }
 
-    for field, patterns in aliases.items():
-        if any(p in name for p in patterns):
-            return field
+    for field, pats in patterns.items():
+        for pat in pats:
+            if re.search(pat, name):
+                return field
     return None
 
 
@@ -52,7 +53,18 @@ class Gdsreceiver(DataHandlerPlugin):
     def init(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.visualizer_addr = ("127.0.0.1", 5005)
-        self.latest: Dict[str, float] = {}
+
+        # Keep last-known values so every received field can refresh the plot
+        self.latest: Dict[str, float] = {
+            "accel_x": 0.0,
+            "accel_y": 0.0,
+            "accel_z": 0.0,
+            "ang_x": 0.0,
+            "ang_y": 0.0,
+            "ang_z": 0.0,
+        }
+        self.seq = 0
+        print("gds-receiver initialized -> sending UDP to 127.0.0.1:5005")
 
     def get_handled_descriptors(self):
         return ["FW_PACKET_TELEM"]
@@ -60,27 +72,25 @@ class Gdsreceiver(DataHandlerPlugin):
     def data_callback(self, data, source):
         full_name = data.template.get_full_name()
         field = _field_from_channel(full_name)
-        if field is None:
-            return
-
         value = _safe_float(data.get_val_obj().val)
-        if value is None:
+
+        # Temporary debug so you can see what F´ is actually sending
+        print("telemetry:", full_name, "->", field, value)
+
+        if field is None or value is None:
             return
 
         self.latest[field] = value
+        self.seq += 1
 
         packet = {
+            "seq": self.seq,
+            "ts": time.time(),
             "name": full_name,
-            "accel_x": self.latest.get("accel_x"),
-            "accel_y": self.latest.get("accel_y"),
-            "accel_z": self.latest.get("accel_z"),
-            "ang_x": self.latest.get("ang_x"),
-            "ang_y": self.latest.get("ang_y"),
-            "ang_z": self.latest.get("ang_z"),
+            **self.latest,
         }
 
-        if None not in packet.values():
-            self.sock.sendto(
-                json.dumps(packet).encode("utf-8"),
-                self.visualizer_addr,
-            )
+        self.sock.sendto(
+            json.dumps(packet).encode("utf-8"),
+            self.visualizer_addr,
+        )

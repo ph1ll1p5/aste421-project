@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aste421-imu-gds-plugin"
+version = "0.1.0"
+dependencies = ["fprime-gds"]
+
+[project.entry-points.fprime_gds]
+imu_receiver = "gdsPlugins.gdsReceiver:Gdsreceiver"

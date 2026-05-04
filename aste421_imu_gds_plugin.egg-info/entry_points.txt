@@ -1,0 +1,2 @@
+[fprime_gds]
+imu_receiver = gdsPlugins.gdsReceiver:Gdsreceiver
