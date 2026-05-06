@@ -12,7 +12,7 @@ namespace asteIMU {
 // Component construction and destruction
 // ----------------------------------------------------------------------
 
-ImuManager ::ImuManager(const char* const compName) : ImuManagerComponentBase(compName), m_address(DEVICE_DEFAULT_ADDRESS) {}
+ImuManager ::ImuManager(const char* const compName) : ImuManagerComponentBase(compName), m_address(DEVICE_DEFAULT_ADDRESS), m_tickCount(0), m_isRunning(false) {}
 
 ImuManager ::~ImuManager() {}
 
@@ -51,8 +51,19 @@ void ImuManager ::parameterUpdated(FwPrmIdType id) {
 // Handler implementations for typed input ports
 // ----------------------------------------------------------------------
 
-void ImuManager ::run_handler(FwIndexType portNum, U32 context) {
-    this->imuStateMachine_sendSignal_tick();
+void ImuManager::run_handler(FwIndexType portNum, U32 context) {
+    m_tickCount++;
+
+    if (m_isRunning) {
+        // In RUN state — tick every cycle for fast IMU reads
+        this->imuStateMachine_sendSignal_tick();
+    } else {
+        // Still booting — only tick every 10 cycles to give
+        // the BNO055 time to complete each init step (1 sec at 10Hz)
+        if (m_tickCount % 10 == 0) {
+            this->imuStateMachine_sendSignal_tick();
+        }
+    }
     this->dispatchCurrentMessages();
 }
 
@@ -70,11 +81,13 @@ void ImuManager ::RESET_cmdHandler(FwOpcodeType opCode, U32 cmdSeq) {
 // Implementations for internal state machine actions
 // ----------------------------------------------------------------------
 
-void ImuManager ::asteIMU_ImuStateMachine_action_doReset(SmId smId, asteIMU_ImuStateMachine::Signal signal) {
-    // This function is implemented only for the specific instance "imuStateMachine"
+void ImuManager::asteIMU_ImuStateMachine_action_doReset(
+    SmId smId, asteIMU_ImuStateMachine::Signal signal) {
     FW_ASSERT(smId == SmId::imuStateMachine);
+
+    m_isRunning = false;  // back to slow boot ticking
+
     Drv::I2cStatus status = this->reset();
-    // Transition to RESET state on failure
     if (status != Drv::I2cStatus::I2C_OK) {
         this->log_WARNING_HI_I2cError(this->m_address, status);
         this->imuStateMachine_sendSignal_error();
@@ -121,13 +134,16 @@ void ImuManager ::asteIMU_ImuStateMachine_action_doConfigure(SmId smId, asteIMU_
     }
 }
 
-void ImuManager ::asteIMU_ImuStateMachine_action_doRead(SmId smId, asteIMU_ImuStateMachine::Signal signal) {
-    // This function is implemented only for the specific instance "imuStateMachine"
+void ImuManager::asteIMU_ImuStateMachine_action_doRead(
+    SmId smId, asteIMU_ImuStateMachine::Signal signal) {
     FW_ASSERT(smId == SmId::imuStateMachine);
+
+    m_isRunning = true;
     ImuData imuData;
     Drv::I2cStatus status = this->read(imuData);
     if (status != Drv::I2cStatus::I2C_OK) {
         this->log_WARNING_HI_I2cError(this->m_address, status);
+        m_isRunning = false;  // back to boot sequence
         this->imuStateMachine_sendSignal_error();
     } else {
         this->tlmWrite_Reading(imuData);

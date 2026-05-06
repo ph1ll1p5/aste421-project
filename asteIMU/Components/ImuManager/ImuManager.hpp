@@ -134,6 +134,8 @@ class ImuManager final : public ImuManagerComponentBase {
 
   private:
     U8 m_address;
+    U32 m_tickCount;
+    bool m_isRunning;
 };
 
 }  // namespace MpuImu

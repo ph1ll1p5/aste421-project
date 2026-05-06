@@ -58,56 +58,64 @@ Drv::I2cStatus ImuManager ::configure_device() {
     return this->bus_write(pageBuffer, emptyBuffer);
 }
 
-Drv::I2cStatus ImuManager ::read(ImuData& imuData) {
-    U8 data[DATA_LENGTH];
-    U8 registerAddress = DATA_BASE_REGISTER;
-
+Drv::I2cStatus ImuManager::read(ImuData& imuData) {
+    // Read 6 bytes of fused Euler angles starting at 0x1A:
+    //   bytes 0-1: heading (yaw),  little-endian, 1/16 deg per LSB, 0-360
+    //   bytes 2-3: roll,           little-endian, 1/16 deg per LSB, -90 to +90
+    //   bytes 4-5: pitch,          little-endian, 1/16 deg per LSB, -180 to +180
+    U8 data[EULER_DATA_LENGTH];
+    U8 registerAddress = EULER_BASE_REGISTER;
+ 
     Fw::Buffer writeBuffer(&registerAddress, 1);
-    Fw::Buffer readBuffer(data, DATA_LENGTH);
+    Fw::Buffer readBuffer(data, EULER_DATA_LENGTH);
     Drv::I2cStatus status = this->bus_write(writeBuffer, readBuffer);
     if (status != Drv::I2cStatus::I2C_OK) {
         return status;
     }
-    RawImuData raw = this->deserialize_raw_data(readBuffer);
 
-    Fw::ParamValid paramValid;
-    const AccelerationRange accelerationRange = this->paramGet_ACCELEROMETER_RANGE(paramValid);
-    FW_ASSERT(paramValid != Fw::ParamValid::INVALID, static_cast<FwAssertArgType>(paramValid));
-    const GyroscopeRange gyroscopeRange = this->paramGet_GYROSCOPE_RANGE(paramValid);
-    FW_ASSERT(paramValid != Fw::ParamValid::INVALID, static_cast<FwAssertArgType>(paramValid));
-
-    imuData = this->convert_raw_data(raw, accelerationRange, gyroscopeRange);
+    I16 raw_heading = static_cast<I16>((static_cast<U16>(data[1]) << 8) | data[0]);
+    I16 raw_roll = static_cast<I16>((static_cast<U16>(data[3]) << 8) | data[2]);
+    I16 raw_pitch = static_cast<I16>((static_cast<U16>(data[5]) << 8) | data[4]);
+ 
+    // Convert to degrees using BNO055 scale factor (1/16 deg per LSB)
+    F32 yaw   = static_cast<F32>(raw_heading) * EULER_SCALE;
+    F32 roll  = static_cast<F32>(raw_roll) * EULER_SCALE;
+    F32 pitch = static_cast<F32>(raw_pitch) * EULER_SCALE;
+ 
+    imuData.get_acceleration().set_x(roll);
+    imuData.get_acceleration().set_y(pitch);
+    imuData.get_acceleration().set_z(yaw);
+    imuData.get_rotation().set_x(0.0f);
+    imuData.get_rotation().set_y(0.0f);
+    imuData.get_rotation().set_z(0.0f);
+    imuData.set_temperature(0.0f);
+ 
     return status;
 }
 
-RawImuData ImuManager ::deserialize_raw_data(Fw::Buffer& buffer) {
-    auto deserializer = buffer.getDeserializer();
+RawImuData ImuManager::deserialize_raw_data(Fw::Buffer& buffer) {
+    // Parse the 6-byte Euler angle buffer into RawImuData
+    const U8* data = buffer.getData();
     RawImuData raw;
-    // BNO055 accelerometer data: X_LSB, X_MSB, Y_LSB, Y_MSB, Z_LSB, Z_MSB
-    deserializer.deserialize(raw.acceleration[0]);
-    deserializer.deserialize(raw.acceleration[1]);
-    deserializer.deserialize(raw.acceleration[2]);
-    raw.temperature = 0;  // Read separately if needed
-    // Gyroscope data follows accelerometer
-    deserializer.deserialize(raw.gyroscope[0]);
-    deserializer.deserialize(raw.gyroscope[1]);
-    deserializer.deserialize(raw.gyroscope[2]);
+    raw.heading = static_cast<I16>((static_cast<U16>(data[1]) << 8) | data[0]);
+    raw.roll    = static_cast<I16>((static_cast<U16>(data[3]) << 8) | data[2]);
+    raw.pitch   = static_cast<I16>((static_cast<U16>(data[5]) << 8) | data[4]);
     return raw;
 }
 
-ImuData ImuManager ::convert_raw_data(const RawImuData& raw,
-                                      const AccelerationRange& accelerationRange,
-                                      const GyroscopeRange& gyroscopeRange) {
-    asteIMU::ImuData imuData;
-    // BNO055 in NDOF mode: accel scale is 1mg/LSB = 0.001 m/s^2 per LSB
-    imuData.get_acceleration().set_x(static_cast<F32>(raw.acceleration[0]) / 100.0f);
-    imuData.get_acceleration().set_y(static_cast<F32>(raw.acceleration[1]) / 100.0f);
-    imuData.get_acceleration().set_z(static_cast<F32>(raw.acceleration[2]) / 100.0f);
+ImuData ImuManager::convert_raw_data(const RawImuData& raw,
+                                     const AccelerationRange& accelerationRange,
+                                     const GyroscopeRange& gyroscopeRange) {
+    // accelerationRange and gyroscopeRange are unused in NDOF mode —
+    // the BNO055 handles all scaling internally.
+    ImuData imuData;
+    imuData.get_acceleration().set_x(static_cast<F32>(raw.roll) * EULER_SCALE);
+    imuData.get_acceleration().set_y(static_cast<F32>(raw.pitch) * EULER_SCALE);
+    imuData.get_acceleration().set_z(static_cast<F32>(raw.heading) * EULER_SCALE);
+    imuData.get_rotation().set_x(0.0f);
+    imuData.get_rotation().set_y(0.0f);
+    imuData.get_rotation().set_z(0.0f);
     imuData.set_temperature(0.0f);
-    // BNO055 in NDOF mode: gyro scale is 1/16 deg/s per LSB
-    imuData.get_rotation().set_x(static_cast<F32>(raw.gyroscope[0]) / 16.0f);
-    imuData.get_rotation().set_y(static_cast<F32>(raw.gyroscope[1]) / 16.0f);
-    imuData.get_rotation().set_z(static_cast<F32>(raw.gyroscope[2]) / 16.0f);
     return imuData;
 }
 

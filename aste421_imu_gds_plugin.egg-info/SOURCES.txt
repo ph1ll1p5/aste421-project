@@ -10,6 +10,7 @@ aste421_imu_gds_plugin.egg-info/top_level.txt
 gdsPlugins/__init__.py
 gdsPlugins/gdsInterface.py
 gdsPlugins/gdsReceiver.py
+gdsPlugins/imuViz.py
 gdsPlugins/kalman_imu.py
 gdsPlugins/udpListener.py
 gdsPlugins/visualReceiver.py

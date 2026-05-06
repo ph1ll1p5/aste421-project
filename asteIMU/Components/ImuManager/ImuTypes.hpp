@@ -22,17 +22,23 @@ namespace asteIMU {
     static constexpr U8 RESET_VALUE = 0x20;
     static constexpr U8 POWER_ON_VALUE = 0x00;
 
-    // Data registers - accelerometer starts at 0x28
-    static constexpr U8 DATA_BASE_REGISTER = 0x28;
-    static constexpr U8 DATA_LENGTH = 6 * sizeof(U16); // accel + gyro (no temp for now)
+    static constexpr U8 QUAT_BASE_REGISTER = 0x20;  // fused quaternion output
+    static constexpr U8 QUAT_DATA_LENGTH   = 8;      // w, x, y, z — 2 bytes each
 
-    // Accel/Gyro config (BNO055 handles scaling internally in NDOF mode)
-    static constexpr U8 ACCEL_CONFIG_2G = 0x00;
-    static constexpr U8 ACCEL_CONFIG_4G = 0x01;
-    static constexpr U8 ACCEL_CONFIG_8G = 0x02;
-    static constexpr U8 ACCEL_CONFIG_16G = 0x03;
-    static constexpr U8 GYRO_CONFIG_250DEG = 0x04;
-    static constexpr U8 GYRO_CONFIG_500DEG = 0x03;
+    static constexpr U8 EULER_BASE_REGISTER = 0x1A;  // fused euler angles
+    static constexpr U8 EULER_DATA_LENGTH   = 6;     // heading, roll, pitch — 2 bytes each
+
+    // BNO055 quaternion scale factor: 1 unit = 1/2^14
+    static constexpr F32 QUAT_SCALE = 1.0f / 16384.0f;
+    // BNO055 euler scale factor: 1 unit = 1/16 degree
+    static constexpr F32 EULER_SCALE = 1.0f / 16.0f;
+
+    static constexpr U8 ACCEL_CONFIG_2G   = 0x00;
+    static constexpr U8 ACCEL_CONFIG_4G   = 0x01;
+    static constexpr U8 ACCEL_CONFIG_8G   = 0x02;
+    static constexpr U8 ACCEL_CONFIG_16G  = 0x03;
+    static constexpr U8 GYRO_CONFIG_250DEG  = 0x04;
+    static constexpr U8 GYRO_CONFIG_500DEG  = 0x03;
     static constexpr U8 GYRO_CONFIG_1000DEG = 0x02;
     static constexpr U8 GYRO_CONFIG_2000DEG = 0x00;
 
@@ -40,9 +46,9 @@ namespace asteIMU {
     static constexpr F32 TEMPERATURE_OFFSET = 0.0f;
 
     struct RawImuData {
-        I16 acceleration[3];
-        I16 temperature;
-        I16 gyroscope[3];
+        I16 heading;  
+        I16 roll;
+        I16 pitch;
     };
 }
 #endif
