@@ -1,46 +1,64 @@
+"""
+gdsReceiver.py — FPrime GDS plugin for IMU telemetry
+
+Handles the single asteIMU.imuManager.Reading channel which carries
+an ImuData struct:
+    acceleration: {x, y, z}   — linear acceleration (m/s² or mg)
+    rotation:     {x, y, z}   — angular velocity (deg/s)
+    temperature:  int          — ignored
+
+Forwards a flat JSON UDP packet to the visualizer on port 5005.
+"""
+
 import json
-import re
 import socket
 import time
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from fprime_gds.common.handlers import DataHandlerPlugin
 from fprime_gds.plugin.definitions import gds_plugin
 
+READING_CHANNEL = "asteIMU.imuManager.Reading"
 
-def _safe_float(value: Any) -> Optional[float]:
+
+def _unpack_struct(val_obj) -> Optional[Dict[str, float]]:
+    """
+    Walk the SerializableType tree and extract accel/rotation x,y,z.
+    Prints debug info the first time it runs so you can verify field names.
+    """
     try:
-        return float(value)
-    except Exception:
+        members = val_obj.val  # list of (name, sub_val_obj)
+        result = {}
+
+        for field_name, sub_val in members:
+            fname = field_name.lower()
+
+            # acceleration sub-struct
+            if "accel" in fname or fname == "acceleration":
+                for sub_name, sub_sub in sub_val.val:
+                    result[f"accel_{sub_name.lower()}"] = float(sub_sub.val)
+
+            # rotation / gyro sub-struct
+            elif "rotat" in fname or "gyro" in fname or "angular" in fname:
+                for sub_name, sub_sub in sub_val.val:
+                    result[f"ang_{sub_name.lower()}"] = float(sub_sub.val)
+
+        required = {"accel_x", "accel_y", "accel_z", "ang_x", "ang_y", "ang_z"}
+        if not required.issubset(result.keys()):
+            print(f"[gdsReceiver] Partial unpack — got: {list(result.keys())}")
+            print(f"[gdsReceiver] Raw members: {[(n, type(v)) for n,v in members]}")
+            return None
+
+        return result
+
+    except Exception as e:
+        print(f"[gdsReceiver] Unpack error: {e}")
+        print(f"[gdsReceiver] val_obj type: {type(val_obj)}, val: {val_obj.val}")
         return None
-
-
-def _field_from_channel(full_name: str) -> Optional[str]:
-    """
-    Broader matching so the plugin works even if your F´ channel names
-    are slightly different than expected.
-    """
-    name = full_name.lower()
-
-    patterns = {
-        "accel_x": [r"acc.*x", r"x.*acc", r"_ax\b", r"\.ax\b", r"accelx"],
-        "accel_y": [r"acc.*y", r"y.*acc", r"_ay\b", r"\.ay\b", r"accely"],
-        "accel_z": [r"acc.*z", r"z.*acc", r"_az\b", r"\.az\b", r"accelz"],
-        "ang_x":   [r"gyro.*x", r"x.*gyro", r"_gx\b", r"\.gx\b", r"ang.*x"],
-        "ang_y":   [r"gyro.*y", r"y.*gyro", r"_gy\b", r"\.gy\b", r"ang.*y"],
-        "ang_z":   [r"gyro.*z", r"z.*gyro", r"_gz\b", r"\.gz\b", r"ang.*z"],
-    }
-
-    for field, pats in patterns.items():
-        for pat in pats:
-            if re.search(pat, name):
-                return field
-    return None
 
 
 @gds_plugin(DataHandlerPlugin)
 class Gdsreceiver(DataHandlerPlugin):
-    """Receive decoded telemetry and forward IMU packets to the visualizer."""
 
     @classmethod
     def get_name(cls):
@@ -53,44 +71,31 @@ class Gdsreceiver(DataHandlerPlugin):
     def init(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.visualizer_addr = ("127.0.0.1", 5005)
-
-        # Keep last-known values so every received field can refresh the plot
-        self.latest: Dict[str, float] = {
-            "accel_x": 0.0,
-            "accel_y": 0.0,
-            "accel_z": 0.0,
-            "ang_x": 0.0,
-            "ang_y": 0.0,
-            "ang_z": 0.0,
-        }
         self.seq = 0
-        print("gds-receiver initialized -> sending UDP to 127.0.0.1:5005")
+        self._debug_printed = False
+        print(f"[gdsReceiver] initialized — listening for {READING_CHANNEL}")
+        print(f"[gdsReceiver] forwarding to UDP 127.0.0.1:5005")
 
     def get_handled_descriptors(self):
         return ["FW_PACKET_TELEM"]
 
     def data_callback(self, data, source):
         full_name = data.template.get_full_name()
-        field = _field_from_channel(full_name)
-        value = _safe_float(data.get_val_obj().val)
+        print("[gdsReceiver] callback:", full_name)
 
-        # Temporary debug so you can see what F´ is actually sending
-        print("telemetry:", full_name, "->", field, value)
+        # temporarily disable this filter
+        # if full_name != READING_CHANNEL:
+        #     return
 
-        if field is None or value is None:
+        val_obj = data.get_val_obj()
+        print("[gdsReceiver] val_obj:", val_obj.val)
+
+        fields = _unpack_struct(val_obj)
+        print("[gdsReceiver] unpacked:", fields)
+
+        if fields is None:
             return
 
-        self.latest[field] = value
-        self.seq += 1
-
-        packet = {
-            "seq": self.seq,
-            "ts": time.time(),
-            "name": full_name,
-            **self.latest,
-        }
-
-        self.sock.sendto(
-            json.dumps(packet).encode("utf-8"),
-            self.visualizer_addr,
-        )
+        packet = {"seq": self.seq, "ts": time.time(), "name": full_name, **fields}
+        print("[gdsReceiver] sending:", packet)
+        self.sock.sendto(json.dumps(packet).encode("utf-8"), self.visualizer_addr)
